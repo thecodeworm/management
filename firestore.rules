@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Team + mentor allowlist. This is the ONLY access gate — edit this list
+    // (and redeploy with `firebase deploy --only firestore:rules`) to add or
+    // remove someone. Everything not matched below is denied by default.
+    function isAllowed() {
+      return request.auth != null &&
+             request.auth.token.email in [
+               // 'someone@example.com',
+               // 'mentor@example.com'
+             ];
+    }
+
+    match /members/{id}  { allow read, write: if isAllowed(); }
+    match /actions/{id}  { allow read, write: if isAllowed(); }
+    match /parts/{id}    { allow read, write: if isAllowed(); }
+    match /meetings/{id} { allow read, write: if isAllowed(); }
+  }
+}
