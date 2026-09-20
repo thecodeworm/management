@@ -324,6 +324,18 @@ body {
 .form-textarea { min-height: 80px; resize: vertical; }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+.attendee-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.attendee-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border: 1px solid var(--border2); border-radius: 20px;
+  background: var(--surface); font-size: 13px; cursor: pointer; user-select: none;
+  transition: all 0.15s;
+}
+.attendee-chip:hover { border-color: var(--accent); }
+.attendee-chip:has(input:checked) { background: var(--accent-light); border-color: var(--accent); }
+.attendee-chip input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+.attendee-hint { font-size: 12px; color: var(--text3); margin-top: 8px; }
+
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 .btn-cancel {
   padding: 8px 16px; border: 1px solid var(--border2);
@@ -1186,6 +1198,24 @@ async function deleteMember(id) {
 }
 
 /* ── Meetings CRUD ── */
+// Checkbox list of team members. `meeting` is set when editing so we can preselect:
+// by attendeeIds for meetings saved with the picker, or by name match for older
+// meetings that only have the free-text `attendees` string.
+function attendeePickerHTML(meeting) {
+  if (!state.members.length) {
+    return '<div class="attendee-hint">No members yet — add them in the Members tab first.</div>';
+  }
+  const ids = meeting && meeting.attendeeIds;
+  const legacy = meeting && !ids && meeting.attendees ? meeting.attendees.toLowerCase() : '';
+  const chips = state.members.map(m => {
+    const checked = ids ? ids.includes(m.id) : (legacy && legacy.includes(m.name.toLowerCase()));
+    return `<label class="attendee-chip"><input type="checkbox" value="${esc(m.id)}" ${checked ? 'checked' : ''}>${avatarHTML(m.name, 20, 9)}${esc(m.name)}</label>`;
+  }).join('');
+  const hint = legacy
+    ? `<div class="attendee-hint">Previously entered: ${esc(meeting.attendees)}</div>` : '';
+  return `<div class="attendee-grid" id="f-attendees">${chips}</div>${hint}`;
+}
+
 function showAddMeeting() {
   const d = new Date();
   const diff = (7 - d.getDay()) % 7 || 7;
@@ -1195,7 +1225,7 @@ function showAddMeeting() {
   <div class="modal-title"><i class="ti ti-calendar-plus"></i>Log Meeting</div>
   <div class="form-row"><label class="form-label">Date *</label><input type="date" class="form-input" id="f-date" value="${nextSun}" autofocus></div>
   <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="f-title" placeholder="e.g. Sprint Planning, Build Day, Strategy Session"></div>
-  <div class="form-row"><label class="form-label">Attendees</label><input class="form-input" id="f-attendees" placeholder="Who was there?"></div>
+  <div class="form-row"><label class="form-label">Attendees</label>${attendeePickerHTML(null)}</div>
   <div class="form-row"><label class="form-label">Notes, agenda & decisions</label><textarea class="form-textarea" id="f-notes" style="min-height:110px;" placeholder="What was discussed? Key decisions? Next steps?"></textarea></div>
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -1209,7 +1239,7 @@ function showEditMeeting(id) {
   <div class="modal-title"><i class="ti ti-edit"></i>Edit Meeting</div>
   <div class="form-row"><label class="form-label">Date *</label><input type="date" class="form-input" id="f-date" value="${esc(m.date)}" autofocus></div>
   <div class="form-row"><label class="form-label">Title</label><input class="form-input" id="f-title" value="${esc(m.title||'')}"></div>
-  <div class="form-row"><label class="form-label">Attendees</label><input class="form-input" id="f-attendees" value="${esc(m.attendees||'')}"></div>
+  <div class="form-row"><label class="form-label">Attendees</label>${attendeePickerHTML(m)}</div>
   <div class="form-row"><label class="form-label">Notes, agenda & decisions</label><textarea class="form-textarea" id="f-notes" style="min-height:110px;">${esc(m.notes||'')}</textarea></div>
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -1220,10 +1250,15 @@ function showEditMeeting(id) {
 async function saveMeeting(id) {
   const date = document.getElementById('f-date').value;
   if (!date) { alert('Please pick a date.'); return; }
+  const attendeeIds = [...document.querySelectorAll('#f-attendees input:checked')].map(i => i.value);
   const data = {
     date,
     title: document.getElementById('f-title').value || 'Sunday Meeting',
-    attendees: document.getElementById('f-attendees').value,
+    attendeeIds,
+    // Name snapshot: what the meeting card shows, and it survives a member being deleted later.
+    attendees: attendeeIds
+      .map(id => (state.members.find(m => m.id === id) || {}).name)
+      .filter(Boolean).join(', '),
     notes: document.getElementById('f-notes').value,
     updatedAt: Date.now(),
     updatedBy: actor()
