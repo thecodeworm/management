@@ -467,7 +467,34 @@ const appRoot = document.getElementById('app');
 
 function showAuthCard(html) { authCard.innerHTML = html; }
 
-function showSignIn() {
+// Social/in-app webviews (Instagram, Facebook, TikTok, Discord, Google app, Android WebView…)
+// lose or partition sessionStorage during the Google popup round-trip, which surfaces as
+// "Unable to process request due to missing initial state" on the Firebase handler page.
+const IN_APP_BROWSER_RE = /FBAN|FBAV|Instagram|Snapchat|TikTok|MicroMessenger|Line\/|Discord|GSA\/|; wv\)/i;
+const inAppBrowser = IN_APP_BROWSER_RE.test(navigator.userAgent);
+
+const BROWSER_HELP = 'Open this page directly in Safari or Chrome (not inside another app), ' +
+  'turn off private browsing, and make sure popups are allowed for this site.';
+
+function signInErrorMessage(e) {
+  switch (e && e.code) {
+    case 'auth/cancelled-popup-request':
+      return null; // a second click superseded the first popup — not worth reporting
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the sign-in popup. Allow popups for this site and try again.';
+    case 'auth/popup-closed-by-user':
+      // Also what the opener sees when the popup itself shows "missing initial state".
+      return 'Sign-in didn\'t finish. If the popup showed an error such as "missing initial state", ' + BROWSER_HELP;
+    case 'auth/network-request-failed':
+      return 'Network error while signing in. Check your connection and try again.';
+    case 'auth/unauthorized-domain':
+      return 'This site\'s domain isn\'t authorized for sign-in. Tell a mentor.';
+    default:
+      return 'Sign-in failed' + (e && e.code ? ' (' + e.code + ')' : '') + '. ' + BROWSER_HELP;
+  }
+}
+
+function showSignIn(err) {
   authGate.style.display = 'flex';
   appRoot.style.display = 'none';
   stopListeners();
@@ -475,7 +502,9 @@ function showSignIn() {
     <div class="auth-icon"><i class="ti ti-robot"></i></div>
     <div class="auth-title">FTC Team Hub</div>
     <div class="auth-sub">Sign in with your team Google account to continue.</div>
+    ${inAppBrowser ? `<div class="auth-error" style="margin:0 0 14px;">You're in an in-app browser, where Google sign-in often fails. ${BROWSER_HELP}</div>` : ''}
     <button class="google-btn" id="signin-btn"><i class="ti ti-brand-google"></i> Sign in with Google</button>
+    ${err ? `<div class="auth-error">${err}</div>` : ''}
   `);
   document.getElementById('signin-btn').onclick = doSignIn;
 }
@@ -503,10 +532,15 @@ function showApp(email) {
 }
 
 async function doSignIn() {
+  const btn = document.getElementById('signin-btn');
+  if (btn) btn.disabled = true;
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
   } catch (e) {
     console.error('Sign-in failed', e);
+    const msg = signInErrorMessage(e);
+    if (msg) showSignIn(msg);
+    else if (btn) btn.disabled = false;
   }
 }
 
