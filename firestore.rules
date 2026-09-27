@@ -16,7 +16,9 @@ service cloud.firestore {
                'kodali.aakash@gmail.com',
                'sohini.tomar@gmail.com',
                'munendratomar@gmail.com',
-               'anoopkodali@gmail.com'
+               'anoopkodali@gmail.com',
+               'shreehan.pawar@gmail.com',
+               'shreehan74@gmail.com'
              ];
     }
 
